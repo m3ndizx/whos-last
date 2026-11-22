@@ -25,8 +25,8 @@ jobs:
       - name: Install Godot 4.7.2 export templates
         run: |
           set -eu
-          if ! command -v unzip >/dev/null; then
-            apt-get update -qq && apt-get install -y -qq unzip
+          if ! command -v curl >/dev/null || ! command -v unzip >/dev/null; then
+            apt-get update -qq && apt-get install -y -qq curl unzip
           fi
           tmp="$(mktemp -d)"
           curl -sSfL -o "$tmp/templates.tpz" \
