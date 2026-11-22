@@ -17,22 +17,45 @@ jobs:
     container:
       image: barichello/godot-ci@sha256:cdcca31e9194fd59a68a63f4b1b9c3981716819c520cd6f7966c5d72ca7246bd # Godot 4.7.2
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
-      # The CI image ships without export templates, so the Web export fails with
-      # "No export template found". Fetch the official 4.7.2 templates and check
-      # them against Godot's published SHA512 before installing.
-      - name: Install Godot 4.7.2 export templates
+      # Godot reads its data folder from XDG_DATA_HOME. Point it at the runner temp
+      # folder, which is the same path on the host, so the cache step can save and
+      # restore the export templates there.
+      - name: Restore Godot export templates cache
+        id: templates
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ${{ runner.temp }}/godot-data/godot/export_templates/4.7.2.stable
+          key: godot-4.7.2-web-templates-ca4d71c4d7b8
+
+      # The CI image has no curl, unzip or libfontconfig. Without libfontconfig,
+      # Godot logs a fontconfig error on every run.
+      - name: Install system packages
         run: |
           set -eu
-          if ! command -v curl >/dev/null || ! command -v unzip >/dev/null; then
-            apt-get update -qq && apt-get install -y -qq curl unzip
+          pkgs=""
+          command -v curl >/dev/null || pkgs="$pkgs curl"
+          command -v unzip >/dev/null || pkgs="$pkgs unzip"
+          find /usr/lib /lib -name 'libfontconfig.so.1' 2>/dev/null | grep -q . || pkgs="$pkgs libfontconfig1"
+          if [ -n "$pkgs" ]; then
+            apt-get update -qq
+            apt-get install -y -qq $pkgs
           fi
+
+      # The CI image ships without export templates, so the Web export fails with
+      # "No export template found" unless they are installed. Fetch the official
+      # 4.7.2 templates only on a cache miss, and check them against Godot's
+      # published SHA512 before installing.
+      - name: Download and verify export templates
+        if: steps.templates.outputs.cache-hit != 'true'
+        run: |
+          set -eu
           tmp="$(mktemp -d)"
           curl -sSfL -o "$tmp/templates.tpz" \
             "https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_export_templates.tpz"
           echo "ca4d71c4d7b81dfc15d1a98baa07534aa95b03fdda78a0075b06672e1648d2e5f40980c9adc28d23e1b92e732ee7bf3461997aa804af74ec2fcd7a93ccb84079  $tmp/templates.tpz" | sha512sum -c -
-          dest="$HOME/.local/share/godot/export_templates/4.7.2.stable"
+          dest="$RUNNER_TEMP/godot-data/godot/export_templates/4.7.2.stable"
           mkdir -p "$dest"
           unzip -j -o "$tmp/templates.tpz" "templates/web_nothreads_release.zip" "templates/version.txt" -d "$dest"
           rm -rf "$tmp"
@@ -40,15 +63,19 @@ jobs:
       # .godot/ is gitignored, so a clean checkout has no imported assets.
       # Import first, or the export ships without textures and icons.
       - name: Import assets
+        env:
+          XDG_DATA_HOME: ${{ runner.temp }}/godot-data
         run: godot --headless --path src --import
 
       - name: Export Web build
+        env:
+          XDG_DATA_HOME: ${{ runner.temp }}/godot-data
         run: |
           mkdir -p src/build/web
           # Godot resolves export paths inside the project, so this is relative to src/.
           godot --headless --verbose --path src --export-release "Web" build/web/index.html
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: web-build
           path: src/build/web
@@ -64,14 +91,14 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           name: web-build
           path: src/build/web
 
-      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
         with:
           path: src/build/web
 
       - id: deployment
-        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5
