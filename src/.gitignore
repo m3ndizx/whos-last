@@ -1,0 +1,3 @@
+# Godot cache and build output
+.godot/
+build/
