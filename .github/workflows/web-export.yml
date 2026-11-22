@@ -19,6 +19,24 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
+      # The CI image ships without export templates, so the Web export fails with
+      # "No export template found". Fetch the official 4.7.2 templates and check
+      # them against Godot's published SHA512 before installing.
+      - name: Install Godot 4.7.2 export templates
+        run: |
+          set -euo pipefail
+          if ! command -v unzip >/dev/null; then
+            apt-get update -qq && apt-get install -y -qq unzip
+          fi
+          tmp="$(mktemp -d)"
+          curl -sSfL -o "$tmp/templates.tpz" \
+            "https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_export_templates.tpz"
+          echo "ca4d71c4d7b81dfc15d1a98baa07534aa95b03fdda78a0075b06672e1648d2e5f40980c9adc28d23e1b92e732ee7bf3461997aa804af74ec2fcd7a93ccb84079  $tmp/templates.tpz" | sha512sum -c -
+          dest="$HOME/.local/share/godot/export_templates/4.7.2.stable"
+          mkdir -p "$dest"
+          unzip -j -o "$tmp/templates.tpz" "templates/web_nothreads_release.zip" "templates/version.txt" -d "$dest"
+          rm -rf "$tmp"
+
       # .godot/ is gitignored, so a clean checkout has no imported assets.
       # Import first, or the export ships without textures and icons.
       - name: Import assets
