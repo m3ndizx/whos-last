@@ -24,7 +24,7 @@ jobs:
       # them against Godot's published SHA512 before installing.
       - name: Install Godot 4.7.2 export templates
         run: |
-          set -euo pipefail
+          set -eu
           if ! command -v unzip >/dev/null; then
             apt-get update -qq && apt-get install -y -qq unzip
           fi
